@@ -1,6 +1,5 @@
 import requests
 import json
-import time
 import os
 import logging
 from dotenv import load_dotenv
