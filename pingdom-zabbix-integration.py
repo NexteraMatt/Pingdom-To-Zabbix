@@ -35,7 +35,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 retry_strategy = Retry(
     total=3,
     status_forcelist=[429, 500, 502, 503, 504],
-    method_whitelist=["HEAD", "GET", "OPTIONS", "POST"],
+    allowed_methods=["HEAD", "GET", "OPTIONS", "POST"],
     backoff_factor=1
 )
 adapter = HTTPAdapter(max_retries=retry_strategy)
@@ -78,7 +78,7 @@ def get_zabbix_host_id(auth_token, host_name):
     headers = {'Content-Type': 'application/json-rpc'}
     response = http.post(zabbix_api_url, headers=headers, data=json.dumps(payload))
     response.raise_for_status()
-    result = response.json()['result']
+    result = response.json().get('result', [])
     host_id = result[0]['hostid'] if result else None
     if host_id:
         host_id_cache[host_name] = host_id
@@ -261,4 +261,4 @@ def main():
         logging.error(f"An unexpected error occurred: {e}")
 
 if __name__ == "__main__":
-    main(
+    main()
