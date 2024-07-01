@@ -24,7 +24,7 @@ This script automates the integration of Pingdom checks into a Zabbix monitoring
 ### Clone the Repository
 
 ```sh
-git clone https://github.com/yourusername/pingdom-to-zabbix.git
+git clone https://github.com/MattTHG/pingdom-to-zabbix.git
 cd pingdom-to-zabbix
 ```
 
