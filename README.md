@@ -52,7 +52,7 @@ ZABBIX_TEMPLATE_ID=your_zabbix_template_id
 To run the script manually:
 
 ```sh
-python3 pingdom_to_zabbix.py
+python3 pingdom-zabbix-integration.py
 ```
 
 ### Setting Up a Cron Job
@@ -66,7 +66,7 @@ crontab -e
 Add the following line to run the script every hour:
 
 ```cron
-0 * * * * /usr/bin/python3 /path/to/pingdom_to_zabbix.py >> /path/to/logfile.log 2>&1
+0 * * * * /usr/bin/python3 /path/to/pingdom-zabbix-integration.py >> /path/to/logfile.log 2>&1
 ```
 
 ## Script Details
