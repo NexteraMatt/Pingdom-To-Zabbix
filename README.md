@@ -4,6 +4,11 @@
 
 This script automates the integration of Pingdom checks into a Zabbix monitoring environment. It fetches the current status of Pingdom checks and ensures that corresponding hosts, items, and triggers are created and updated in Zabbix, providing centralized monitoring through Zabbix.
 
+## Optimization Update
+
+- Optimized script to efficiently process Pingdom checks and update Zabbix monitoring every minute.
+- Implemented asynchronous processing and optimized API calls for improved performance.
+
 ## Features
 
 - **Automated Integration**: Automatically integrates Pingdom checks with Zabbix.
