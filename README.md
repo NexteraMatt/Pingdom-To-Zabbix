@@ -73,15 +73,15 @@ Add the following line to run the script every hour:
 
 ### Main Functions
 
-- \`zabbix_login()\`: Authenticates with the Zabbix API and retrieves an auth token.
-- \`get_pingdom_checks()\`: Fetches the list of checks from Pingdom.
-- \`get_zabbix_host_id()\`: Retrieves the host ID from Zabbix based on the host name.
-- \`create_zabbix_host()\`: Creates a new host in Zabbix.
-- \`create_zabbix_item_batch()\`: Creates items in Zabbix for each check.
-- \`create_zabbix_trigger_batch()\`: Creates triggers in Zabbix for each check.
-- \`send_data_to_zabbix_batch()\`: Updates the status of each check in Zabbix.
-- \`process_check()\`: Processes each Pingdom check to ensure it is represented in Zabbix.
-- \`main()\`: Orchestrates the overall workflow, from authentication to processing checks and updating Zabbix.
+- `zabbix_login()`: Authenticates with the Zabbix API and retrieves an auth token.
+- `get_pingdom_checks()`: Fetches the list of checks from Pingdom.
+- `get_zabbix_host_id()`: Retrieves the host ID from Zabbix based on the host name.
+- `create_zabbix_host()`: Creates a new host in Zabbix.
+- `create_zabbix_item_batch()`: Creates items in Zabbix for each check.
+- `create_zabbix_trigger_batch()`: Creates triggers in Zabbix for each check.
+- `send_data_to_zabbix_batch()`: Updates the status of each check in Zabbix.
+- `process_check()`: Processes each Pingdom check to ensure it is represented in Zabbix.
+- `main()`: Orchestrates the overall workflow, from authentication to processing checks and updating Zabbix.
 
 ## Error Handling and Logging
 
