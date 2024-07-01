@@ -14,6 +14,8 @@ This script automates the integration of Pingdom checks into a Zabbix monitoring
 - **Automated Integration**: Automatically integrates Pingdom checks with Zabbix.
 - **Batch Processing**: Efficiently processes checks in batches.
 - **Concurrent Execution**: Utilizes concurrent processing to handle multiple checks efficiently.
+- **Debug Logging**: Enhanced with debug logging to print API responses for easier troubleshooting.
+- **Improved Error Handling**: Gracefully manages API responses and provides detailed error messages.
 - **Robust Error Handling**: Includes comprehensive error handling and logging.
 - **Centralized Monitoring**: Allows centralized monitoring of Pingdom checks within Zabbix.
 
