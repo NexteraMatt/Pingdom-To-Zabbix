@@ -1,7 +1,7 @@
-import requests
-import json
 import os
+import json
 import logging
+import requests
 from dotenv import load_dotenv
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from requests.adapters import HTTPAdapter
@@ -10,61 +10,70 @@ from requests.packages.urllib3.util.retry import Retry
 # Load environment variables from .env file
 load_dotenv()
 
-# Environment variables
-pingdom_api_key = os.getenv('PINGDOM_API_KEY')
-zabbix_api_url = os.getenv('ZABBIX_API_URL')
-zabbix_api_user = os.getenv('ZABBIX_API_USER')
-zabbix_api_password = os.getenv('ZABBIX_API_PASSWORD')
-zabbix_host_group_id = os.getenv('ZABBIX_HOST_GROUP_ID')
-zabbix_template_id = os.getenv('ZABBIX_TEMPLATE_ID')
+# Environment variables and validation
+class Config:
+    def __init__(self):
+        self.pingdom_api_key = os.getenv('PINGDOM_API_KEY')
+        self.zabbix_api_url = os.getenv('ZABBIX_API_URL')
+        self.zabbix_api_user = os.getenv('ZABBIX_API_USER')
+        self.zabbix_api_password = os.getenv('ZABBIX_API_PASSWORD')
+        self.zabbix_host_group_id = os.getenv('ZABBIX_HOST_GROUP_ID')
+        self.zabbix_template_id = os.getenv('ZABBIX_TEMPLATE_ID')
+        self.pingdom_api_url = "https://api.pingdom.com/api/3.1/checks"
 
-pingdom_api_url = "https://api.pingdom.com/api/3.1/checks"
+        required_vars = [
+            self.pingdom_api_key, self.zabbix_api_url, self.zabbix_api_user, 
+            self.zabbix_api_password, self.zabbix_host_group_id, self.zabbix_template_id
+        ]
+        if not all(required_vars):
+            raise EnvironmentError("Missing one or more required environment variables.")
 
-# Validate environment variables
-required_vars = [
-    pingdom_api_key, zabbix_api_url, zabbix_api_user, 
-    zabbix_api_password, zabbix_host_group_id, zabbix_template_id
-]
-if not all(required_vars):
-    raise EnvironmentError("Missing one or more required environment variables.")
+config = Config()
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-# Configure retry strategy for requests
-retry_strategy = Retry(
-    total=3,
-    status_forcelist=[429, 500, 502, 503, 504],
-    allowed_methods=["HEAD", "GET", "OPTIONS", "POST"],
-    backoff_factor=1
-)
-adapter = HTTPAdapter(max_retries=retry_strategy)
-http = requests.Session()
-http.mount("https://", adapter)
-http.mount("http://", adapter)
+# Configure session with retry strategy
+def create_session():
+    retry_strategy = Retry(
+        total=3,
+        status_forcelist=[429, 500, 502, 503, 504],
+        method_whitelist=["HEAD", "GET", "OPTIONS", "POST"],
+        backoff_factor=1
+    )
+    adapter = HTTPAdapter(max_retries=retry_strategy)
+    session = requests.Session()
+    session.mount("https://", adapter)
+    session.mount("http://", adapter)
+    return session
+
+session = create_session()
 
 # Cache for host IDs
 host_id_cache = {}
 
 def zabbix_login():
+    """Log in to the Zabbix API and return the authentication token."""
     payload = {
         "jsonrpc": "2.0",
         "method": "user.login",
-        "params": {"user": zabbix_api_user, "password": zabbix_api_password},
+        "params": {"user": config.zabbix_api_user, "password": config.zabbix_api_password},
         "id": 1
     }
     headers = {'Content-Type': 'application/json-rpc'}
-    response = http.post(zabbix_api_url, headers=headers, data=json.dumps(payload))
+    response = session.post(config.zabbix_api_url, headers=headers, data=json.dumps(payload))
     response.raise_for_status()
     return response.json()['result']
 
 def get_pingdom_checks():
-    headers = {'Authorization': f'Bearer {pingdom_api_key}'}
-    response = http.get(pingdom_api_url, headers=headers)
+    """Fetch checks from the Pingdom API."""
+    headers = {'Authorization': f'Bearer {config.pingdom_api_key}'}
+    response = session.get(config.pingdom_api_url, headers=headers)
     response.raise_for_status()
     return response.json()
 
 def get_zabbix_host_id(auth_token, host_name):
+    """Get the Zabbix host ID for the given host name."""
     if host_name in host_id_cache:
         return host_id_cache[host_name]
 
@@ -76,7 +85,7 @@ def get_zabbix_host_id(auth_token, host_name):
         "id": 1
     }
     headers = {'Content-Type': 'application/json-rpc'}
-    response = http.post(zabbix_api_url, headers=headers, data=json.dumps(payload))
+    response = session.post(config.zabbix_api_url, headers=headers, data=json.dumps(payload))
     response.raise_for_status()
     result = response.json().get('result', [])
     host_id = result[0]['hostid'] if result else None
@@ -85,52 +94,44 @@ def get_zabbix_host_id(auth_token, host_name):
     return host_id
 
 def create_zabbix_host(auth_token, host_name):
+    """Create a new host in Zabbix."""
     payload = {
         "jsonrpc": "2.0",
         "method": "host.create",
         "params": {
             "host": host_name,
             "interfaces": [{"type": 1, "main": 1, "useip": 1, "ip": "127.0.0.1", "dns": "", "port": "10050"}],
-            "groups": [{"groupid": zabbix_host_group_id}],
-            "templates": [{"templateid": zabbix_template_id}]
+            "groups": [{"groupid": config.zabbix_host_group_id}],
+            "templates": [{"templateid": config.zabbix_template_id}]
         },
         "auth": auth_token,
         "id": 1
     }
     headers = {'Content-Type': 'application/json-rpc'}
-    response = http.post(zabbix_api_url, headers=headers, data=json.dumps(payload))
-    try:
-        response.raise_for_status()
-        result = response.json()
-        if 'result' in result and 'hostids' in result['result']:
-            host_id = result['result']['hostids'][0]
-            host_id_cache[host_name] = host_id
-            return host_id
-        else:
-            logging.error(f"Error creating Zabbix host {host_name}. Response: {response.text}")
-            return None
-    except requests.exceptions.HTTPError as e:
-        logging.error(f"HTTP error occurred while creating Zabbix host {host_name}: {e}")
-        return None
-    except KeyError as e:
-        logging.error(f"Error parsing Zabbix host.create response: {e}. Response: {response.text}")
-        return None
+    response = session.post(config.zabbix_api_url, headers=headers, data=json.dumps(payload))
+    response.raise_for_status()
+    result = response.json()
+    if 'result' in result and 'hostids' in result['result']:
+        host_id = result['result']['hostids'][0]
+        host_id_cache[host_name] = host_id
+        return host_id
+    logging.error(f"Error creating Zabbix host {host_name}. Response: {response.text}")
+    return None
 
 def create_zabbix_item_batch(auth_token, host_ids, check_names):
-    items_payload = []
-    for host_id, check_name in zip(host_ids, check_names):
-        item_key = f"pingdom.status[{check_name}]"
-        item_payload = {
+    """Create items in Zabbix in batch."""
+    items_payload = [
+        {
             "name": check_name,
-            "key_": item_key,
+            "key_": f"pingdom.status[{check_name}]",
             "hostid": host_id,
             "type": 2,
             "value_type": 3,
             "delay": "60s",
             "history": "7d",
             "trends": "365d"
-        }
-        items_payload.append(item_payload)
+        } for host_id, check_name in zip(host_ids, check_names)
+    ]
 
     payload = {
         "jsonrpc": "2.0",
@@ -140,29 +141,20 @@ def create_zabbix_item_batch(auth_token, host_ids, check_names):
         "id": 1
     }
     headers = {'Content-Type': 'application/json-rpc'}
-    response = http.post(zabbix_api_url, headers=headers, data=json.dumps(payload))
-    try:
-        response.raise_for_status()
-        return response.json()
-    except requests.exceptions.HTTPError as e:
-        logging.error(f"HTTP error occurred while creating Zabbix items: {e}")
-        return None
-    except ValueError as e:
-        logging.error(f"Error parsing Zabbix item.create response: {e}. Response: {response.text}")
-        return None
+    response = session.post(config.zabbix_api_url, headers=headers, data=json.dumps(payload))
+    response.raise_for_status()
+    return response.json()
 
 def create_zabbix_trigger_batch(auth_token, host_ids, check_names):
-    triggers_payload = []
-    for host_id, check_name in zip(host_ids, check_names):
-        item_key = f"pingdom.status[{check_name}]"
-        trigger_expression = f"{{Pingdom_{check_name}:{item_key}.last()}}=0"
-        trigger_payload = {
+    """Create triggers in Zabbix in batch."""
+    triggers_payload = [
+        {
             "description": f"Pingdom check {check_name} is down",
-            "expression": trigger_expression,
+            "expression": f"{{Pingdom_{check_name}:pingdom.status[{check_name}].last()}}=0",
             "priority": 4,
             "hostid": host_id
-        }
-        triggers_payload.append(trigger_payload)
+        } for host_id, check_name in zip(host_ids, check_names)
+    ]
 
     payload = {
         "jsonrpc": "2.0",
@@ -172,28 +164,20 @@ def create_zabbix_trigger_batch(auth_token, host_ids, check_names):
         "id": 1
     }
     headers = {'Content-Type': 'application/json-rpc'}
-    response = http.post(zabbix_api_url, headers=headers, data=json.dumps(payload))
-    try:
-        response.raise_for_status()
-        return response.json()
-    except requests.exceptions.HTTPError as e:
-        logging.error(f"HTTP error occurred while creating Zabbix triggers: {e}")
-        return None
-    except ValueError as e:
-        logging.error(f"Error parsing Zabbix trigger.create response: {e}. Response: {response.text}")
-        return None
+    response = session.post(config.zabbix_api_url, headers=headers, data=json.dumps(payload))
+    response.raise_for_status()
+    return response.json()
 
 def send_data_to_zabbix_batch(auth_token, host_ids, check_names, statuses):
-    items_payload = []
-    for host_id, check_name, status in zip(host_ids, check_names, statuses):
-        item_key = f"pingdom.status[{check_name}]"
-        item_payload = {
+    """Update items in Zabbix in batch."""
+    items_payload = [
+        {
             "hostid": host_id,
-            "key_": item_key,
+            "key_": f"pingdom.status[{check_name}]",
             "value_type": 3,
             "value": status
-        }
-        items_payload.append(item_payload)
+        } for host_id, check_name, status in zip(host_ids, check_names, statuses)
+    ]
 
     payload = {
         "jsonrpc": "2.0",
@@ -203,18 +187,12 @@ def send_data_to_zabbix_batch(auth_token, host_ids, check_names, statuses):
         "id": 1
     }
     headers = {'Content-Type': 'application/json-rpc'}
-    response = http.post(zabbix_api_url, headers=headers, data=json.dumps(payload))
-    try:
-        response.raise_for_status()
-        return response.json()
-    except requests.exceptions.HTTPError as e:
-        logging.error(f"HTTP error occurred while updating Zabbix items: {e}")
-        return None
-    except ValueError as e:
-        logging.error(f"Error parsing Zabbix item.update response: {e}. Response: {response.text}")
-        return None
+    response = session.post(config.zabbix_api_url, headers=headers, data=json.dumps(payload))
+    response.raise_for_status()
+    return response.json()
 
 def process_check(auth_token, check):
+    """Process a single Pingdom check."""
     check_name = check['name']
     status = 1 if check['status'] == "up" else 0
     host_name = f"Pingdom_{check_name}"
@@ -225,6 +203,7 @@ def process_check(auth_token, check):
     return host_id, check_name, status
 
 def main():
+    """Main function to orchestrate the data flow between Pingdom and Zabbix."""
     try:
         auth_token = zabbix_login()
         checks = get_pingdom_checks()
