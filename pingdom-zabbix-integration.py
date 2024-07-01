@@ -5,6 +5,8 @@ import os
 import logging
 from dotenv import load_dotenv
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from requests.adapters import HTTPAdapter
+from requests.packages.urllib3.util.retry import Retry
 
 # Load environment variables from .env file
 load_dotenv()
@@ -30,6 +32,21 @@ if not all(required_vars):
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
+# Configure retry strategy for requests
+retry_strategy = Retry(
+    total=3,
+    status_forcelist=[429, 500, 502, 503, 504],
+    method_whitelist=["HEAD", "GET", "OPTIONS", "POST"],
+    backoff_factor=1
+)
+adapter = HTTPAdapter(max_retries=retry_strategy)
+http = requests.Session()
+http.mount("https://", adapter)
+http.mount("http://", adapter)
+
+# Cache for host IDs
+host_id_cache = {}
+
 def zabbix_login():
     payload = {
         "jsonrpc": "2.0",
@@ -38,17 +55,20 @@ def zabbix_login():
         "id": 1
     }
     headers = {'Content-Type': 'application/json-rpc'}
-    response = requests.post(zabbix_api_url, headers=headers, data=json.dumps(payload))
+    response = http.post(zabbix_api_url, headers=headers, data=json.dumps(payload))
     response.raise_for_status()
     return response.json()['result']
 
 def get_pingdom_checks():
     headers = {'Authorization': f'Bearer {pingdom_api_key}'}
-    response = requests.get(pingdom_api_url, headers=headers)
+    response = http.get(pingdom_api_url, headers=headers)
     response.raise_for_status()
     return response.json()
 
 def get_zabbix_host_id(auth_token, host_name):
+    if host_name in host_id_cache:
+        return host_id_cache[host_name]
+
     payload = {
         "jsonrpc": "2.0",
         "method": "host.get",
@@ -57,10 +77,13 @@ def get_zabbix_host_id(auth_token, host_name):
         "id": 1
     }
     headers = {'Content-Type': 'application/json-rpc'}
-    response = requests.post(zabbix_api_url, headers=headers, data=json.dumps(payload))
+    response = http.post(zabbix_api_url, headers=headers, data=json.dumps(payload))
     response.raise_for_status()
     result = response.json()['result']
-    return result[0]['hostid'] if result else None
+    host_id = result[0]['hostid'] if result else None
+    if host_id:
+        host_id_cache[host_name] = host_id
+    return host_id
 
 def create_zabbix_host(auth_token, host_name):
     payload = {
@@ -76,9 +99,11 @@ def create_zabbix_host(auth_token, host_name):
         "id": 1
     }
     headers = {'Content-Type': 'application/json-rpc'}
-    response = requests.post(zabbix_api_url, headers=headers, data=json.dumps(payload))
+    response = http.post(zabbix_api_url, headers=headers, data=json.dumps(payload))
     response.raise_for_status()
-    return response.json()['result']['hostids'][0]
+    host_id = response.json()['result']['hostids'][0]
+    host_id_cache[host_name] = host_id
+    return host_id
 
 def create_zabbix_item_batch(auth_token, host_ids, check_names):
     items_payload = []
@@ -104,7 +129,7 @@ def create_zabbix_item_batch(auth_token, host_ids, check_names):
         "id": 1
     }
     headers = {'Content-Type': 'application/json-rpc'}
-    response = requests.post(zabbix_api_url, headers=headers, data=json.dumps(payload))
+    response = http.post(zabbix_api_url, headers=headers, data=json.dumps(payload))
     response.raise_for_status()
     return response.json()
 
@@ -129,7 +154,7 @@ def create_zabbix_trigger_batch(auth_token, host_ids, check_names):
         "id": 1
     }
     headers = {'Content-Type': 'application/json-rpc'}
-    response = requests.post(zabbix_api_url, headers=headers, data=json.dumps(payload))
+    response = http.post(zabbix_api_url, headers=headers, data=json.dumps(payload))
     response.raise_for_status()
     return response.json()
 
@@ -153,7 +178,7 @@ def send_data_to_zabbix_batch(auth_token, host_ids, check_names, statuses):
         "id": 1
     }
     headers = {'Content-Type': 'application/json-rpc'}
-    response = requests.post(zabbix_api_url, headers=headers, data=json.dumps(payload))
+    response = http.post(zabbix_api_url, headers=headers, data=json.dumps(payload))
     response.raise_for_status()
     return response.json()
 
