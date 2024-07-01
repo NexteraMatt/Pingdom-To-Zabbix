@@ -87,6 +87,15 @@ Add the following line to run the script every hour:
 
 The script includes comprehensive error handling and logging. Logs are saved to a file specified in the cron job configuration for easy monitoring and troubleshooting.
 
+## Zabbix Compatibility
+
+This script has been tested and confirmed to work with the following versions of Zabbix:
+
+- Zabbix 4.0 and later versions
+
+If you encounter any issues with other versions of Zabbix, please [open an issue](https://github.com/MattTHG/Pingdom-To-Zabbix/issues) to report the problem or contribute a fix.
+
+
 ## License
 
 This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
